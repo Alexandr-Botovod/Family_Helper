@@ -12,6 +12,7 @@ local requests = require 'requests'
 local json = require 'json'
 encoding.default = 'CP1251'
 local u8 = encoding.UTF8
+function isMonetLoader() return MONET_VERSION ~= nil end
 
 -------------------------------------------------- JSON SETTINGS -------------------------------------------------------
 local settings = {}
@@ -20,22 +21,25 @@ local default_settings = {
         version = thisScript().version,
     }
 }
-
+-------------------------------------------------- Переменные ---------------------------------------------------------------------
+local main_window = imgui.ImBool(false) -- Создаем глобальную переменную окна
+local UpdateWindow = imgui.new.bool()
 local message_color = 0x87CEEB
 local message_color_hex = '{87CEEB}'
 local script_tag = '[Family Helper]'
-
+local download_helper = false
+local commands = {}
 -------------------------------------------------- Конфигурация --------------------------------------------------------
 local configDirectory = getWorkingDirectory():gsub('\\', '/') .. "/Family Helper"
 local path_helper = getWorkingDirectory():gsub('\\', '/') .. "/FamilyHelper.lua"
-local path_settings = configDirectory .. "/Settings.json"
+local path_settings = configDirectory .. "/Настройки.json"
 function load_settings()
     if not doesDirectoryExist(configDirectory) then
         createDirectory(configDirectory)
     end
     if not doesFileExist(path_settings) then
         settings = default_settings
-        print('[' .. script_tag .. '] Файл с настройками не найден, использую стандартные настройки!')
+        print(script_tag .. ' Файл с настройками не найден, использую стандартные настройки!')
     else
         local file = io.open(path_settings, 'r')
         if file then
@@ -43,29 +47,28 @@ function load_settings()
             file:close()
             if #contents == 0 then
                 settings = default_settings
-                print('[' .. script_tag .. '] Не удалось открыть файл с настройками, использую стандартные настройки!')
+                print(script_tag .. ' Не удалось открыть файл с настройками, использую стандартные настройки!')
             else
                 local result, loaded = pcall(decodeJson, contents)
                 if result then
                     settings = loaded
-                    print('[' .. script_tag .. '] Настройки успешно загружены!')
+                    print(script_tag .. ' Настройки успешно загружены!')
                     if settings.general.version ~= thisScript().version then
-                        print('[' .. script_tag .. '] Новая версия, сброс настроек!')
+                        print(script_tag .. ' Новая версия, сброс настроек!')
                         settings = default_settings
                         save_settings()
                         reload_script = true
                         thisScript():reload()
                     else
-                        print('[' .. script_tag .. '] Настройки успешно загружены!')
+                        print(script_tag .. ' Настройки успешно загружены!')
                     end
                 else
-                    print('[' .. script_tag ..
-                    '] Не удалось открыть файл с настройками, использую стандартные настройки!')
+                    print(script_tag .. ' Не удалось открыть файл с настройками, использую стандартные настройки!')
                 end
             end
         else
             settings = default_settings
-            print('[' .. script_tag .. '] Не удалось открыть файл с настройками, использую стандартные настройки!')
+            print(script_tag .. ' Не удалось открыть файл с настройками, использую стандартные настройки!')
         end
     end
 end
@@ -76,10 +79,10 @@ function save_settings()
         local result, encoded = pcall(encodeJson, settings)
         file:write(result and encoded or "")
         file:close()
-        print('[' .. script_tag .. '] Настройки сохранены!')
+        print(script_tag .. ' Настройки сохранены!')
         return result
     else
-        print('[' .. script_tag .. '] Не удалось сохранить настройки хелпера, ошибка: ', errstr)
+        print(script_tag .. ' Не удалось сохранить настройки хелпера, ошибка: ', errstr)
         return false
     end
 end
@@ -87,9 +90,9 @@ end
 load_settings()
 
 function check_update()
-    print(script_tag .. '  Начинаю проверку на наличие обновлений...')
-    sampAddChatMessage(script_tag .. '  {ffffff}Начинаю проверку на наличие обновлений...', message_color)
-    local path = configDirectory .. "/Update_Info.json"
+    print(script_tag .. ' Начинаю проверку на наличие обновлений...')
+    sampAddChatMessage(script_tag .. ' {ffffff}Начинаю проверку на наличие обновлений...', message_color)
+    local path = configDirectory .. "/Обновления.json"
     os.remove(path)
     local url =
     'https://raw.githubusercontent.com/Alexandr-Botovod/Prison_Helper/refs/heads/main/PrisonHelper/Update_info.json'
@@ -104,16 +107,16 @@ function check_update()
                     print(script_tag .. " Текущая установленная версия:", thisScript().version)
                     print(script_tag .. " Текущая версия в облаке:", uVer)
                     if thisScript().version ~= uVer then
-                        print(script_tag .. '  Доступно обновление!')
-                        sampAddChatMessage(script_tag .. '  {ffffff}Доступно обновление!', message_color)
+                        print(script_tag .. ' Доступно обновление!')
+                        sampAddChatMessage(script_tag .. ' {ffffff}Доступно обновление!', message_color)
                         need_update_helper = true
                         updateUrl = uUrl
                         updateVer = uVer
                         updateInfoText = uText
                         UpdateWindow[0] = true
                     else
-                        print(script_tag .. '  Обновление не нужно!')
-                        sampAddChatMessage(script_tag .. '  {ffffff}Обновление не нужно, у вас актуальная версия!',
+                        print(script_tag .. ' Обновление не нужно!')
+                        sampAddChatMessage(script_tag .. ' {ffffff}Обновление не нужно, у вас актуальная версия!',
                             message_color)
                     end
                 end
@@ -130,16 +133,16 @@ function check_update()
                     print(script_tag .. " Текущая установленная версия:", thisScript().version)
                     print(script_tag .. " Текущая версия в облаке:", uVer)
                     if thisScript().version ~= uVer then
-                        print(script_tag .. '  Доступно обновление!')
-                        sampAddChatMessage(script_tag .. '  {ffffff}Доступно обновление!', message_color)
+                        print(script_tag .. ' Доступно обновление!')
+                        sampAddChatMessage(script_tag .. ' {ffffff}Доступно обновление!', message_color)
                         need_update_helper = true
                         updateUrl = uUrl
                         updateVer = uVer
                         updateInfoText = uText
                         UpdateWindow[0] = true
                     else
-                        print(script_tag .. '  Обновление не нужно!')
-                        sampAddChatMessage(script_tag .. '  {ffffff}Обновление не нужно, у вас актуальная версия!',
+                        print(script_tag .. '   Обновление не нужно!')
+                        sampAddChatMessage(script_tag .. ' {ffffff}Обновление не нужно, у вас актуальная версия!',
                             message_color)
                     end
                 end
@@ -257,63 +260,22 @@ function downloadToFile(url, path, callback, progressInterval)
 end
 
 function downloadFileFromUrlToPath(url, path)
-    print(script_tag .. '  Начинаю скачивание файла в ' .. path)
+    print(script_tag .. '   Начинаю скачивание файла в ' .. path)
     if isMonetLoader() then
         downloadToFile(url, path, function(type, pos, total_size)
             if type == "downloading" then
             elseif type == "finished" then
                 if download_helper then
                     sampAddChatMessage(
-                        script_tag .. '  {ffffff}Загрузка новой версии хелпера завершена успешно! Перезагрузка..',
+                        script_tag .. '   {ffffff}Загрузка новой версии хелпера завершена успешно! Перезагрузка..',
                         message_color)
                     reload_script = true
                     thisScript():unload()
                 elseif type == "error" then
-                    sampAddChatMessage(script_tag .. '  {ffffff}Ошибка загрузки: ' .. pos, message_color)
+                    sampAddChatMessage(script_tag .. '   {ffffff}Ошибка загрузки: ' .. pos, message_color)
                 end
             end
         end)
-    end
-end
-
--- Глобальные переменные
-local main_window = imgui.ImBool(false)
-local commands = {}
-local script_url = "https://raw.githubusercontent.com/username/repository/main/script.lua"
-local settings_url = "https://raw.githubusercontent.com/username/repository/main/settings.json"
-local script_path = thisScript().path
-local script_version = "1.0.0" -- Текущая версия скрипта
-
--- Функция для проверки, является ли строка числом
-local function isNumber(str)
-    return tonumber(str) ~= nil
-end
-
--- Функция автообновления с проверкой версии
-function checkForUpdate()
-    local response = requests.get(settings_url)
-    if response.status_code == 200 then
-        local settings = json.decode(response.text)
-        if settings and settings.version and settings.version ~= script_version then
-            sampAddChatMessage("Доступно обновление: " .. settings.version .. "! Начинаю загрузку...", -1)
-            local script_response = requests.get(script_url)
-            if script_response.status_code == 200 then
-                local file = io.open(script_path, "w")
-                if file then
-                    file:write(script_response.text)
-                    file:close()
-                    sampAddChatMessage("Скрипт обновлен до версии " .. settings.version .. "! Перезапустите его.", -1)
-                else
-                    sampAddChatMessage("Ошибка при записи обновленного скрипта!", -1)
-                end
-            else
-                sampAddChatMessage("Ошибка загрузки обновленного скрипта!", -1)
-            end
-        else
-            sampAddChatMessage("У вас уже установлена последняя версия: " .. script_version, -1)
-        end
-    else
-        sampAddChatMessage("Ошибка проверки обновлений!", -1)
     end
 end
 
@@ -335,10 +297,77 @@ function registerCommands(commandList)
     end
 end
 
+function welcome_message()
+    if not sampIsLocalPlayerSpawned() then
+        sampAddChatMessage(script_tag .. '  {ffffff}Инициализация хелпера прошла успешно!', message_color)
+        sampAddChatMessage(
+            script_tag .. '  {ffffff}Для полной загрузки хелпера сначало заспавнитесь (войдите на сервер)', message_color)
+        repeat wait(0) until sampIsLocalPlayerSpawned()
+    end
+    sampAddChatMessage(script_tag .. '  {ffffff}Загрузка хелпера прошла успешно!', message_color)
+    show_cef_notify('info', script_tag, "Загрузка хелпера прошла успешно!", 3000)
+    if hotkey_no_errors and settings.general.bind_mainmenu and settings.general.use_binds then
+        sampAddChatMessage(
+            script_tag .. '  {ffffff}Чтоб открыть меню хелпера нажмите ' ..
+            message_color_hex ..
+            getNameKeysFrom(settings.general.bind_mainmenu) ..
+            ' {ffffff}или введите команду ' .. message_color_hex .. '/fh',
+            message_color)
+    else
+        sampAddChatMessage(
+            script_tag .. '  {ffffff}Чтоб открыть меню хелпера введите команду ' .. message_color_hex .. '/fh',
+            message_color)
+    end
+end
+
+function show_cef_notify(type, title, text, time)
+    --[[
+	1) type - тип уведомления ( 'info' / 'error' / 'success' / 'halloween' / '' )
+	2) title - текст заголовка/названия уведомления ( указывайте текст )
+	3) text - текст содержимого уведомления ( указывайте текст )
+	4) time - время отображения уведомления в миллисекундах ( указывайте любое число ).
+	]]
+    local str = ('window.executeEvent(\'event.notify.initialize\', \'["%s", "%s", "%s", "%s"]\');'):format(type, title,
+        text, time)
+    local bs = raknetNewBitStream()
+    raknetBitStreamWriteInt8(bs, 17)
+    raknetBitStreamWriteInt32(bs, 0)
+    raknetBitStreamWriteInt32(bs, #str)
+    raknetBitStreamWriteString(bs, str)
+    raknetEmulPacketReceiveBitStream(220, bs)
+    raknetDeleteBitStream(bs)
+end
+
+imgui.OnFrame(
+    function() return UpdateWindow[0] end,
+    function(player)
+        imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+        imgui.Begin(fa.CIRCLE_INFO .. u8 " Оповещение##need_update_helper", _,
+            imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
+        imgui.CenterText(u8 'У вас сейчас установлена версия хелпера ' .. u8(tostring(thisScript().version)) .. ".")
+        imgui.CenterText(u8 'В базе данных найдена версия хелпера - ' .. u8(updateVer) .. ".")
+        imgui.CenterText(u8 'Рекомендуется обновиться, дабы иметь весь актуальный функционал!')
+        imgui.Separator()
+        imgui.CenterText(u8('Что нового в версии ') .. u8(updateVer) .. ':')
+        imgui.Text(updateInfoText)
+        imgui.Separator()
+        if imgui.Button(fa.CIRCLE_XMARK .. u8 ' Не обновлять ', imgui.ImVec2(250 * MONET_DPI_SCALE, 25 * MONET_DPI_SCALE)) then
+            UpdateWindow[0] = false
+        end
+        imgui.SameLine()
+        if imgui.Button(fa.DOWNLOAD .. u8 ' Загрузить новую версию', imgui.ImVec2(250 * MONET_DPI_SCALE, 25 * MONET_DPI_SCALE)) then
+            download_helper = true
+            downloadFileFromUrlToPath(updateUrl, path_helper)
+            UpdateWindow[0] = false
+        end
+        imgui.End()
+    end
+)
+
 -- Функция, выполняемая при загрузке скрипта
 function main()
     while not isSampAvailable() do wait(100) end
-    sampAddChatMessage("SAMP Lua Script v" .. script_version .. " загружен!", -1)
+    welcome_message()
 
     -- Регистрация команд
     registerCommands({
@@ -350,7 +379,7 @@ function main()
                 sampAddChatMessage("Привет, " .. (name or "гость") .. "!", -1)
             end
         },
-        { name = "update", description = "Обновление скрипта", args = checkForUpdate }
+        { name = "update", description = "Обновление скрипта", args = check_update },
     })
 
     -- Основной цикл
@@ -375,10 +404,10 @@ end
 -- Интерфейс с использованием imgui
 imgui.OnDrawFrame = function()
     if main_window.v then
-        imgui.SetNextWindowSize(vec2(300, 200), imgui.Cond.FirstUseEver)
-        imgui.Begin("Test Window", main_window)
-        imgui.Text("Привет, это окно ImGui!")
-        if imgui.Button("Закрыть") then
+        imgui.SetNextWindowSize(imgui.ImVec2(300, 200), imgui.Cond.FirstUseEver)
+        imgui.Begin(u8 "Test Window", main_window)
+        imgui.Text(u8 "Привет, это окно ImGui!")
+        if imgui.Button(u8 "Закрыть") then
             main_window.v = false
         end
         imgui.End()
