@@ -1,7 +1,7 @@
 script_name("Family Helper")
 script_description('This script is intended for families on the Arizona RP samp project.')
 script_author("Wright Family")
-script_version("0.0.0.2")
+script_version("0.0.0.1")
 
 -------------------------------------------------- Библиотеки ----------------------------------------------------------
 require('lib.moonloader')
@@ -20,6 +20,7 @@ local settings = {}
 local default_settings = {
     general = {
         version = thisScript().version,
+        sizeWindow = '1'
     },
     fam = {
         name = "Test",
@@ -28,7 +29,7 @@ local default_settings = {
         balance = "0"
     }
 }
--------------------------------------------------- Переменные ---------------------------------------------------------------------
+-------------------------------------------------- Переменные ----------------------------------------------------------
 local main_window = imgui.new.bool()
 local infoFam = imgui.new.bool(false)
 local updateInformation = imgui.new.bool()
@@ -41,6 +42,12 @@ local sizeX, sizeY = getScreenResolution()
 -- Глобальные переменные
 debug = { [0] = false }
 debug_messages = {} -- Хранение сообщений
+------------------------------------------------[[ Загрузка с гитхаба ]]------------------------------------------------
+local download_helper = false
+local need_update_helper = false
+local updateUrl = ""
+local updateVer = ""
+local updateInfoText = ""
 -------------------------------------------------- Конфигурация --------------------------------------------------------
 local configDirectory = getWorkingDirectory():gsub('\\', '/') .. "/Family Helper"
 local path_helper = getWorkingDirectory():gsub('\\', '/') .. "/FamilyHelper.lua"
@@ -96,7 +103,7 @@ local function saveCommands()
         file:write(encodeJson(commands))
         file:close()
     else
-        print("[Family Helper] Ошибка сохранения команд!")
+        print(script_tag .. " Ошибка сохранения команд!")
     end
 end
 
@@ -110,13 +117,13 @@ local function loadCommands()
             local success, data = pcall(decodeJson, contents)
             if success then
                 commands = data
-                print("[Family Helper] Команды загружены!")
+                print(script_tag .. " Команды загружены!")
             else
-                print("[Family Helper] Ошибка загрузки команд!")
+                print(script_tag .. " Ошибка загрузки команд!")
             end
         end
     else
-        print("[Family Helper] Файл команд не найден, создаю новый.")
+        print(script_tag .. " Файл команд не найден, создаю новый.")
         saveCommands()
     end
 end
@@ -130,7 +137,7 @@ end
 
 -- Функция отображения списка команд
 function showCommands()
-    print("[Family Helper] Доступные команды:")
+    print(script_tag .. " Доступные команды:")
     for name, data in pairs(commands) do
         print("/" .. name .. " - " .. data.description)
     end
@@ -140,15 +147,65 @@ end
 loadCommands()
 
 function check_update()
-    print(script_tag .. ' Начинаю проверку на наличие обновлений...')
-    sampAddChatMessage(script_tag .. ' {ffffff}Начинаю проверку на наличие обновлений...', message_color)
-
+    print(script_tag .. '  Начинаю проверку на наличие обновлений...')
+    sampAddChatMessage(script_tag .. '  {ffffff}Начинаю проверку на наличие обновлений...', message_color)
     local path = configDirectory .. "/Обновления.json"
     os.remove(path)
-
     local url =
-    'https://raw.githubusercontent.com/Alexandr-Botovod/Family_Helper/refs/heads/main/Family%20Helper/Обновления.json'
-
+    'https://github.com/Alexandr-Botovod/Family_Helper/raw/refs/heads/main/Family%20Helper/Обновления.json'
+    if isMonetLoader() then
+        downloadToFile(url, path, function(type, pos, total_size)
+            if type == "finished" then
+                local updateInfo = readJsonFile(path)
+                if updateInfo then
+                    local uVer = updateInfo.current_version
+                    local uUrl = updateInfo.update_url
+                    local uText = updateInfo.update_info
+                    print(script_tag .. " Текущая установленная версия:", thisScript().version)
+                    print(script_tag .. " Текущая версия в облаке:", uVer)
+                    if thisScript().version ~= uVer then
+                        print(script_tag .. '  Доступно обновление!')
+                        sampAddChatMessage(script_tag .. '  {ffffff}Доступно обновление!', message_color)
+                        need_update_helper = true
+                        updateUrl = uUrl
+                        updateVer = uVer
+                        updateInfoText = uText
+                        UpdateWindow[0] = true
+                    else
+                        print(script_tag .. '  Обновление не нужно!')
+                        sampAddChatMessage(script_tag .. '  {ffffff}Обновление не нужно, у вас актуальная версия!',
+                            message_color)
+                    end
+                end
+            end
+        end)
+    else
+        downloadUrlToFile(url, path, function(id, status)
+            if status == 6 then -- ENDDOWNLOADDATA
+                updateInfo = readJsonFile(path)
+                if updateInfo then
+                    local uVer = updateInfo.current_version
+                    local uUrl = updateInfo.update_url
+                    local uText = updateInfo.update_info
+                    print(script_tag .. " Текущая установленная версия:", thisScript().version)
+                    print(script_tag .. " Текущая версия в облаке:", uVer)
+                    if thisScript().version ~= uVer then
+                        print(script_tag .. '  Доступно обновление!')
+                        sampAddChatMessage(script_tag .. '  {ffffff}Доступно обновление!', message_color)
+                        need_update_helper = true
+                        updateUrl = uUrl
+                        updateVer = uVer
+                        updateInfoText = uText
+                        UpdateWindow[0] = true
+                    else
+                        print(script_tag .. '  Обновление не нужно!')
+                        sampAddChatMessage(script_tag .. '  {ffffff}Обновление не нужно, у вас актуальная версия!',
+                            message_color)
+                    end
+                end
+            end
+        end)
+    end
     function readJsonFile(filePath)
         if not doesFileExist(filePath) then
             print(script_tag .. " Ошибка: Файл " .. filePath .. " не существует")
@@ -164,8 +221,6 @@ function check_update()
         local content = file:read("*a")
         file:close()
 
-        print(script_tag .. " JSON-контент: ", content) -- Отладка
-
         local jsonData = decodeJson(content)
         if not jsonData then
             print(script_tag .. " Ошибка: Неверный формат JSON в файле " .. filePath)
@@ -174,77 +229,6 @@ function check_update()
 
         return jsonData
     end
-
-    if isMonetLoader() then
-        downloadToFile(url, path, function(type, pos, total_size)
-            if type == "finished" then
-                updateInfo = readJsonFile(path)
-                if updateInfo then
-                    processUpdateInfo(updateInfo)
-                end
-            end
-        end)
-    else
-        downloadUrlToFile(url, path, function(id, status)
-            if status == 6 then -- ENDDOWNLOADDATA
-                updateInfo = readJsonFile(path)
-                if updateInfo then
-                    processUpdateInfo(updateInfo)
-                end
-            end
-        end)
-    end
-end
-
-function processUpdateInfo(updateInfo)
-    if not updateInfo or not updateInfo.current_version then
-        print(script_tag .. " Ошибка: updateInfo пустой или поврежден!")
-        return
-    end
-
-    local uVer = updateInfo.current_version
-    local uUrl = updateInfo.update_url
-    local uText = updateInfo.update_info
-
-    print(script_tag .. " Текущая установленная версия:", thisScript().version)
-    print(script_tag .. " Текущая версия в облаке:", uVer)
-
-    if thisScript().version ~= uVer then
-        print(script_tag .. ' Доступно обновление!')
-        sampAddChatMessage(script_tag .. ' {ffffff}Доступно обновление!', message_color)
-        need_update_helper = true
-        updateUrl = uUrl
-        updateVer = uVer
-        updateInfoText = uText
-        UpdateWindow[0] = true
-    else
-        print(script_tag .. ' Обновление не нужно!')
-        sampAddChatMessage(script_tag .. ' {ffffff}Обновление не нужно, у вас актуальная версия!', message_color)
-    end
-end
-
-function readJsonFile(filePath)
-    if not doesFileExist(filePath) then
-        print(script_tag .. " Ошибка: Файл " .. filePath .. " не существует")
-        return nil
-    end
-
-    local file, err = io.open(filePath, "r")
-    if not file then
-        print(script_tag .. " Ошибка при открытии файла " .. filePath .. ": " .. err)
-        return nil
-    end
-
-    local content = file:read("*a")
-    file:close()
-
-    local jsonData = decodeJson(content)
-    if not jsonData then
-        print(script_tag .. " Ошибка: Неверный формат JSON в файле " .. filePath)
-        return nil
-    end
-
-    return jsonData
 end
 
 function downloadToFile(url, path, callback, progressInterval)
@@ -333,16 +317,35 @@ function downloadToFile(url, path, callback, progressInterval)
 end
 
 function downloadFileFromUrlToPath(url, path)
-    print(script_tag .. ' Начинаю скачивание в ' .. path)
-    downloadToFile(url, path, function(type, pos, total_size)
-        if type == "finished" then
-            print(script_tag .. ' Загрузка завершена! Перезагрузка...')
-            reload_script = true
-            thisScript():unload()
-        elseif type == "error" then
-            sampAddChatMessage(script_tag .. ' Ошибка загрузки: ' .. pos, message_color)
-        end
-    end)
+    print(script_tag .. '  Начинаю скачивание файла в ' .. path)
+    if isMonetLoader() then
+        downloadToFile(url, path, function(type, pos, total_size)
+            if type == "downloading" then
+            elseif type == "finished" then
+                if download_helper then
+                    sampAddChatMessage(
+                        script_tag .. '  {ffffff}Загрузка новой версии хелпера завершена успешно! Перезагрузка..',
+                        message_color)
+                    reload_script = true
+                    thisScript():unload()
+                end
+            elseif type == "error" then
+                sampAddChatMessage(script_tag .. '  {ffffff}Ошибка загрузки: ' .. pos, message_color)
+            end
+        end)
+    else
+        downloadUrlToFile(url, path, function(id, status)
+            if status == 6 then -- ENDDOWNLOADDATA
+                if download_helper then
+                    sampAddChatMessage(
+                        script_tag .. '  {ffffff}Загрузка новой версии хелпера завершена успешно! Перезагрузка..',
+                        message_color)
+                    reload_script = true
+                    thisScript():unload()
+                end
+            end
+        end)
+    end
 end
 
 -- Функция для регистрации команд из массива
@@ -419,18 +422,18 @@ imgui.OnFrame(
         imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
         imgui.Begin(fa.CIRCLE_INFO .. u8 " Оповещение##need_update_helper", _,
             imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
-        imgui.CenterText('У вас сейчас установлена версия хелпера ' .. (tostring(thisScript().version)) .. ".")
-        imgui.CenterText('В базе данных найдена версия хелпера - ' .. (updateVer) .. ".")
-        imgui.CenterText('Рекомендуется обновиться, дабы иметь весь актуальный функционал!')
+        centerText('У вас сейчас установлена версия хелпера ' .. (tostring(thisScript().version)) .. ".")
+        centerText('В базе данных найдена версия хелпера - ' .. (updateVer) .. ".")
+        centerText('Рекомендуется обновиться, дабы иметь весь актуальный функционал!')
         imgui.Separator()
-        imgui.CenterText('Что нового в версии ' .. (updateVer) .. ':')
+        centerText('Что нового в версии ' .. (updateVer) .. ':')
         imgui.Text(updateInfoText)
         imgui.Separator()
-        if imgui.Button(fa.CIRCLE_XMARK .. ' Не обновлять ', imgui.ImVec2(250 * MONET_DPI_SCALE, 25 * MONET_DPI_SCALE)) then
+        if imgui.Button(fa.CIRCLE_XMARK .. ' Не обновлять ', imgui.ImVec2(250 * settings.general.sizeWindow, 25 * settings.general.sizeWindow)) then
             UpdateWindow[0] = false
         end
         imgui.SameLine()
-        if imgui.Button(fa.DOWNLOAD .. ' Загрузить новую версию', imgui.ImVec2(250 * MONET_DPI_SCALE, 25 * MONET_DPI_SCALE)) then
+        if imgui.Button(fa.DOWNLOAD .. ' Загрузить новую версию', imgui.ImVec2(250 * settings.general.sizeWindow, 25 * settings.general.sizeWindow)) then
             download_helper = true
             downloadFileFromUrlToPath(updateUrl, path_helper)
             UpdateWindow[0] = false
@@ -858,9 +861,8 @@ imgui.OnFrame(
             end
         end
 
-        print(updateInfo)
         if updateInfo then
-            if imgui.BeginChild('##update', imgui.ImVec2(688 * MONET_DPI_SCALE, 372 * MONET_DPI_SCALE), true) then
+            if imgui.BeginChild('##update', imgui.ImVec2(688 * settings.general.sizeWindow, 372 * settings.general.sizeWindow), true) then
                 centerText(fa.STAR .. u8 'История обновлений')
                 imgui.Separator()
 
@@ -906,6 +908,12 @@ function main()
     registerCommand("commands", "Показать список доступных команд", showCommands)
     registerCommand("fh", "Открыть главное меню", function() main_window[0] = not main_window[0] end)
 
+
+    local result, check = pcall(check_update)
+    if not result then
+        sampAddChatMessage(script_tag .. ' {ffffff}Произошла ошибка при попытке проверить наличие обновлений!',
+            message_color)
+    end
     -- Основной цикл с минимальной задержкой
     while true do
         wait(0)
