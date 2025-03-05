@@ -1,7 +1,7 @@
 script_name("Family Helper")
 script_description('This script is intended for families on the Arizona RP samp project.')
 script_author("Wright Family")
-script_version("0.0.0.1")
+script_version("0.0.0.2")
 
 -------------------------------------------------- Библиотеки ----------------------------------------------------------
 require('lib.moonloader')
