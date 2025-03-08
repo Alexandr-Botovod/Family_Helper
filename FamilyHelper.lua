@@ -145,206 +145,86 @@ end
 
 -- Загрузка команд при старте
 loadCommands()
-
+------------------------------------------------ Проверка на обновление ------------------------------------------------
 function check_update()
-    print(script_tag .. '  Начинаю проверку на наличие обновлений...')
-    sampAddChatMessage(script_tag .. '  {ffffff}Начинаю проверку на наличие обновлений...', message_color)
+    print(script_tag .. ' Начинаю проверку на наличие обновлений...')
+    sampAddChatMessage(script_tag .. ' {ffffff}Начинаю проверку на наличие обновлений...', message_color)
+
     local path = configDirectory .. "/Обновления.json"
     os.remove(path)
-    local url =
-    'https://github.com/Alexandr-Botovod/Family_Helper/raw/refs/heads/main/Family%20Helper/Обновления.json'
-    if isMonetLoader() then
+
+    local url = 'https://raw.githubusercontent.com/Alexandr-Botovod/Family_Helper/main/Family%20Helper/Обновления.json'
+
+    if isMonetLoader and isMonetLoader() then
+        sampAddChatMessage('[DEBUG]: Запущен Monet Loader!', -1)
         downloadToFile(url, path, function(type, pos, total_size)
             if type == "finished" then
                 local updateInfo = readJsonFile(path)
                 if updateInfo then
-                    local uVer = updateInfo.current_version
-                    local uUrl = updateInfo.update_url
-                    local uText = updateInfo.update_info
-                    print(script_tag .. " Текущая установленная версия:", thisScript().version)
-                    print(script_tag .. " Текущая версия в облаке:", uVer)
-                    if thisScript().version ~= uVer then
-                        print(script_tag .. '  Доступно обновление!')
-                        sampAddChatMessage(script_tag .. '  {ffffff}Доступно обновление!', message_color)
-                        need_update_helper = true
-                        updateUrl = uUrl
-                        updateVer = uVer
-                        updateInfoText = uText
-                        UpdateWindow[0] = true
-                    else
-                        print(script_tag .. '  Обновление не нужно!')
-                        sampAddChatMessage(script_tag .. '  {ffffff}Обновление не нужно, у вас актуальная версия!',
-                            message_color)
-                    end
-                end
-            end
-        end)
-    else
-        downloadUrlToFile(url, path, function(id, status)
-            if status == 6 then -- ENDDOWNLOADDATA
-                updateInfo = readJsonFile(path)
-                if updateInfo then
-                    local uVer = updateInfo.current_version
-                    local uUrl = updateInfo.update_url
-                    local uText = updateInfo.update_info
-                    print(script_tag .. " Текущая установленная версия:", thisScript().version)
-                    print(script_tag .. " Текущая версия в облаке:", uVer)
-                    if thisScript().version ~= uVer then
-                        print(script_tag .. '  Доступно обновление!')
-                        sampAddChatMessage(script_tag .. '  {ffffff}Доступно обновление!', message_color)
-                        need_update_helper = true
-                        updateUrl = uUrl
-                        updateVer = uVer
-                        updateInfoText = uText
-                        UpdateWindow[0] = true
-                    else
-                        print(script_tag .. '  Обновление не нужно!')
-                        sampAddChatMessage(script_tag .. '  {ffffff}Обновление не нужно, у вас актуальная версия!',
-                            message_color)
-                    end
-                end
-            end
-        end)
-    end
-    function readJsonFile(filePath)
-        if not doesFileExist(filePath) then
-            print(script_tag .. " Ошибка: Файл " .. filePath .. " не существует")
-            return nil
-        end
-
-        local file, err = io.open(filePath, "r")
-        if not file then
-            print(script_tag .. " Ошибка при открытии файла " .. filePath .. ": " .. err)
-            return nil
-        end
-
-        local content = file:read("*a")
-        file:close()
-
-        local jsonData = decodeJson(content)
-        if not jsonData then
-            print(script_tag .. " Ошибка: Неверный формат JSON в файле " .. filePath)
-            return nil
-        end
-
-        return jsonData
-    end
-end
-
-function downloadToFile(url, path, callback, progressInterval)
-    callback = callback or function() end
-    progressInterval = progressInterval or 0.1
-
-    local effil = require("effil")
-    local progressChannel = effil.channel(0)
-
-    local runner = effil.thread(function(url, path)
-        local http = require("socket.http")
-        local ltn = require("ltn12")
-
-        local r, c, h = http.request({
-            method = "HEAD",
-            url = url,
-        })
-
-        if c ~= 200 then
-            return false, c
-        end
-        local total_size = h["content-length"]
-
-        local f = io.open(path, "wb")
-        if not f then
-            return false, "failed to open file"
-        end
-        local success, res, status_code = pcall(http.request, {
-            method = "GET",
-            url = url,
-            sink = function(chunk, err)
-                local clock = os.clock()
-                if chunk and not lastProgress or (clock - lastProgress) >= progressInterval then
-                    progressChannel:push("downloading", f:seek("end"), total_size)
-                    lastProgress = os.clock()
-                elseif err then
-                    progressChannel:push("error", err)
-                end
-
-                return ltn.sink.file(f)(chunk, err)
-            end,
-        })
-
-        if not success then
-            return false, res
-        end
-
-        if not res then
-            return false, status_code
-        end
-
-        return true, total_size
-    end)
-    local thread = runner(url, path)
-
-    local function checkStatus()
-        local tstatus = thread:status()
-        if tstatus == "failed" or tstatus == "completed" then
-            local result, value = thread:get()
-
-            if result then
-                callback("finished", value)
-            else
-                callback("error", value)
-            end
-
-            return true
-        end
-    end
-
-    lua_thread.create(function()
-        if checkStatus() then
-            return
-        end
-
-        while thread:status() == "running" do
-            if progressChannel:size() > 0 then
-                local type, pos, total_size = progressChannel:pop()
-                callback(type, pos, total_size)
-            end
-            wait(0)
-        end
-
-        checkStatus()
-    end)
-end
-
-function downloadFileFromUrlToPath(url, path)
-    print(script_tag .. '  Начинаю скачивание файла в ' .. path)
-    if isMonetLoader() then
-        downloadToFile(url, path, function(type, pos, total_size)
-            if type == "downloading" then
-            elseif type == "finished" then
-                if download_helper then
-                    sampAddChatMessage(
-                        script_tag .. '  {ffffff}Загрузка новой версии хелпера завершена успешно! Перезагрузка..',
-                        message_color)
-                    reload_script = true
-                    thisScript():unload()
+                    checkAndApplyUpdate(updateInfo)
                 end
             elseif type == "error" then
-                sampAddChatMessage(script_tag .. '  {ffffff}Ошибка загрузки: ' .. pos, message_color)
+                sampAddChatMessage(script_tag .. ' {ffffff}Ошибка загрузки: ' .. pos, message_color)
             end
         end)
     else
+        sampAddChatMessage('[DEBUG]: Запущен MoonLoader (ПК версия)', -1)
+        sampAddChatMessage("[DEBUG] Проверяю URL: " .. url, -1)
         downloadUrlToFile(url, path, function(id, status)
+            sampAddChatMessage(string.format("[DEBUG] ID загрузки: %d | Статус: %d", id, status), -1)
+
             if status == 6 then -- ENDDOWNLOADDATA
-                if download_helper then
-                    sampAddChatMessage(
-                        script_tag .. '  {ffffff}Загрузка новой версии хелпера завершена успешно! Перезагрузка..',
-                        message_color)
-                    reload_script = true
-                    thisScript():unload()
-                end
+                sampAddChatMessage("[DEBUG] Файл скачан успешно!", -1)
+            else
+                sampAddChatMessage("[ERROR] Ошибка загрузки файла, статус: " .. status, -1)
             end
         end)
+    end
+end
+
+-- Функция чтения JSON
+function readJsonFile(filePath)
+    if not doesFileExist(filePath) then
+        print(script_tag .. ' Ошибка: Файл ' .. filePath .. ' не существует')
+        return nil
+    end
+    local file = io.open(filePath, "r")
+    if not file then
+        print(script_tag .. ' Ошибка при открытии файла: ' .. filePath)
+        return nil
+    end
+
+    local content = file:read("*a")
+    file:close()
+
+    local jsonData = decodeJson(content)
+    if not jsonData then
+        print(script_tag .. ' Ошибка: Неверный формат JSON в файле ' .. filePath)
+        return nil
+    end
+    return jsonData
+end
+
+-- Проверка обновлений
+function checkAndApplyUpdate(updateInfo)
+    local uVer = updateInfo.current_version
+    local uUrl = updateInfo.update_url
+    local uText = updateInfo.update_info
+
+    print(script_tag .. ' Текущая версия:', thisScript().version)
+    print(script_tag .. ' Версия в облаке:', uVer)
+
+    if thisScript().version ~= uVer then
+        print(script_tag .. ' Доступно обновление!')
+        sampAddChatMessage(script_tag .. ' {ffffff}Доступно обновление!', message_color)
+        need_update_helper = true
+        updateUrl = uUrl
+        updateVer = uVer
+        updateInfoText = uText
+        UpdateWindow[0] = true
+    else
+        print(script_tag .. ' Обновление не требуется!')
+        sampAddChatMessage(script_tag .. ' {ffffff}У вас актуальная версия!', message_color)
     end
 end
 
